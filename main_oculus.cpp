@@ -23,6 +23,7 @@ GLint positionAttribute, colorAttribute;
 
 GLint modelUniform, viewUniform, projectionUniform;
 
+// OculusTextureBuffer is from the OculusSDK\Samples\OculusRoomTiny\OculusRoomTiny (GL)\main.cpp
 struct OculusTextureBuffer
 {
 	ovrSession          Session;
@@ -343,6 +344,73 @@ void renderWorld(glm::mat4 view, glm::mat4 projection) {
 	
 }
 
+void renderVR(glm::mat4 & viewMatWorld, glm::mat4 & viewMatCam, int frameIndex) {
+	for (int eye = 0; eye < 2; eye++) {
+		eyeRenderTexture[eye]->SetAndClearRenderSurface();
+		// Get view and projection matrices
+
+		float Yaw = 0;
+		static OVR::Vector3f Pos2(0.0f, 0.0f, -5.0f);
+		OVR::Matrix4f rollPitchYaw = OVR::Matrix4f::RotationY(Yaw);
+		OVR::Matrix4f finalRollPitchYaw = OVR::Matrix4f(EyeRenderPose[eye].Orientation);
+		OVR::Vector3f finalUp = finalRollPitchYaw.Transform(OVR::Vector3f(0, 1, 0));
+		OVR::Vector3f finalForward = finalRollPitchYaw.Transform(OVR::Vector3f(0, 0, -1));
+		OVR::Vector3f shiftedEyePos = Pos2 + rollPitchYaw.Transform(EyeRenderPose[eye].Position);
+
+		OVR::Matrix4f view = OVR::Matrix4f::LookAtRH(shiftedEyePos, shiftedEyePos + finalForward, finalUp);
+		OVR::Matrix4f proj = ovrMatrix4f_Projection(hmdDesc.DefaultEyeFov[eye], 0.1, 100, ovrProjection_None);
+		viewMatCam = glm::transpose(glm::make_mat4(view.M[0])) * viewMatWorld;
+		glm::mat4 projG = glm::transpose(glm::make_mat4(proj.M[0]));
+
+		renderWorld(viewMatCam, projG);
+
+		// Avoids an error when calling SetAndClearRenderSurface during next iteration.
+		// Without this, during the next while loop iteration SetAndClearRenderSurface
+		// would bind a framebuffer with an invalid COLOR_ATTACHMENT0 because the texture ID
+		// associated with COLOR_ATTACHMENT0 had been unlocked by calling wglDXUnlockObjectsNV.
+		eyeRenderTexture[eye]->UnsetRenderSurface();
+
+		// Commit changes to the textures so they get picked up frame
+		eyeRenderTexture[eye]->Commit();
+	}
+
+	// Do distortion rendering, Present and flush/sync
+
+	ovrLayerEyeFovDepth ld = {};
+	ld.Header.Type = ovrLayerType_EyeFovDepth;
+	ld.Header.Flags = ovrLayerFlag_TextureOriginAtBottomLeft;   // Because OpenGL.
+	ovrTimewarpProjectionDesc posTimewarpProjectionDesc = {};
+	ld.ProjectionDesc = posTimewarpProjectionDesc;
+
+	for (int eye = 0; eye < 2; ++eye)
+	{
+		ld.ColorTexture[eye] = eyeRenderTexture[eye]->ColorTextureChain;
+		ld.DepthTexture[eye] = eyeRenderTexture[eye]->DepthTextureChain;
+		ld.Viewport[eye] = OVR::Recti(eyeRenderTexture[eye]->GetSize());
+		ld.Fov[eye] = hmdDesc.DefaultEyeFov[eye];
+		ld.RenderPose[eye] = EyeRenderPose[eye];
+		ld.SensorSampleTime = sensorSampleTime;
+	}
+
+	ovrLayerHeader* layers = &ld.Header;
+	ovr_SubmitFrame(session, frameIndex, nullptr, &layers, 1);
+}
+
+void renderScreen(int width, int height, glm::mat4& viewMatCam) {
+	SDL_GL_MakeCurrent(window, gl_context);
+
+	// restore OpenGL state
+	glViewport(0, 0, width, height);
+	glScissor(0, 0, width, height);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	glm::mat4 projection = glm::perspective(glm::radians(60.0f), width / (float)height, 0.1f, 100.0f);
+	// render to screen - same view as last eye, but different projection
+	renderWorld(viewMatCam, projection);
+
+	SDL_GL_SwapWindow(window);
+}
+
 void updateHMDMatrixPose(int frameIndex) {
 	// Call ovr_GetRenderDesc each frame to get the ovrEyeRenderDesc, as the returned values (e.g. HmdToEyePose) may change at runtime.
 	eyeRenderDesc[0] = ovr_GetRenderDesc(session, ovrEye_Left, hmdDesc.DefaultEyeFov[0]);
@@ -404,7 +472,6 @@ int main(int argc, char* argv[]) {
 
 	std::cout << glGetString(GL_VERSION) << std::endl;
 	std::cout << "OpenGL version " << glGetString(GL_VERSION) << "." << std::endl;
-	// The window is open: enter program loop (see SDL_PollEvent)
 
 	setupOpenGL();
 	setupOculus();
@@ -436,77 +503,15 @@ int main(int argc, char* argv[]) {
 
 		glm::mat4 viewMatWorld = glm::translate(glm::mat4(1), pos);
 		glm::mat4 viewMatCam;
-		glm::mat4 projection = glm::perspective(glm::radians(60.0f), width/(float)height, 0.1f, 100.0f);
-
+		
 		static int frameIndex = 0;
 		frameIndex++;
+
 		updateHMDMatrixPose(frameIndex);
 		
-
-		for (int eye = 0; eye < 2; eye++) {
-			eyeRenderTexture[eye]->SetAndClearRenderSurface();
-			// Get view and projection matrices
-
-			float Yaw = 0;
-			static OVR::Vector3f Pos2(0.0f, 0.0f, -5.0f);
-			OVR::Matrix4f rollPitchYaw = OVR::Matrix4f::RotationY(Yaw);
-			OVR::Matrix4f finalRollPitchYaw = OVR::Matrix4f(EyeRenderPose[eye].Orientation);
-			OVR::Vector3f finalUp = finalRollPitchYaw.Transform(OVR::Vector3f(0, 1, 0));
-			OVR::Vector3f finalForward = finalRollPitchYaw.Transform(OVR::Vector3f(0, 0, -1));
-			OVR::Vector3f shiftedEyePos = Pos2 + rollPitchYaw.Transform(EyeRenderPose[eye].Position);
-
-			OVR::Matrix4f view = OVR::Matrix4f::LookAtRH(shiftedEyePos, shiftedEyePos + finalForward, finalUp);
-			OVR::Matrix4f proj = ovrMatrix4f_Projection(hmdDesc.DefaultEyeFov[eye], 0.1, 100, ovrProjection_None);
-			viewMatCam = glm::transpose(glm::make_mat4(view.M[0])) * viewMatWorld;
-			glm::mat4 projG = glm::transpose(glm::make_mat4(proj.M[0]));
-			
-			renderWorld(viewMatCam, projG);
-
-			// Avoids an error when calling SetAndClearRenderSurface during next iteration.
-			// Without this, during the next while loop iteration SetAndClearRenderSurface
-			// would bind a framebuffer with an invalid COLOR_ATTACHMENT0 because the texture ID
-			// associated with COLOR_ATTACHMENT0 had been unlocked by calling wglDXUnlockObjectsNV.
-			eyeRenderTexture[eye]->UnsetRenderSurface();
-
-			// Commit changes to the textures so they get picked up frame
-			eyeRenderTexture[eye]->Commit();
-		}
-
-		// Do distortion rendering, Present and flush/sync
-
-		ovrLayerEyeFovDepth ld = {};
-		ld.Header.Type = ovrLayerType_EyeFovDepth;
-		ld.Header.Flags = ovrLayerFlag_TextureOriginAtBottomLeft;   // Because OpenGL.
-		ovrTimewarpProjectionDesc posTimewarpProjectionDesc = {};
-		ld.ProjectionDesc = posTimewarpProjectionDesc;
-
-		for (int eye = 0; eye < 2; ++eye)
-		{
-			ld.ColorTexture[eye] = eyeRenderTexture[eye]->ColorTextureChain;
-			ld.DepthTexture[eye] = eyeRenderTexture[eye]->DepthTextureChain;
-			ld.Viewport[eye] = OVR::Recti(eyeRenderTexture[eye]->GetSize());
-			ld.Fov[eye] = hmdDesc.DefaultEyeFov[eye];
-			ld.RenderPose[eye] = EyeRenderPose[eye];
-			ld.SensorSampleTime = sensorSampleTime;
-		}
-
-		ovrLayerHeader* layers = &ld.Header;
-		ovr_SubmitFrame(session, frameIndex, nullptr, &layers, 1);
-
-		SDL_GL_MakeCurrent(window, gl_context);
-		
-		// restore OpenGL state
-		glViewport(0, 0, width, height);
-		glScissor(0, 0, width, height);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-		// render to screen (could be different than VR)
-		renderWorld(viewMatCam, projection);
-
-		SDL_GL_SwapWindow(window);
+		renderVR(viewMatWorld, viewMatCam, frameIndex);
+		renderScreen(width, height, viewMatCam);
 	}
-
-
 
 	SDL_GL_DeleteContext(gl_context);
 
