@@ -1,3 +1,5 @@
+[![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/mortennobel/SimpleVRCpp/master/LICENSE)
+
 # SimpleVRCpp
 
 Simple example of how to use OpenGL, SDL2 (2.0.8) with Oculus VR SDK 1.3.0 (OVR).
