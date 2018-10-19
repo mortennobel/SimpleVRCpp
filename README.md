@@ -4,6 +4,7 @@
 
 Simple example of how to use OpenGL, SDL2 (2.0.8) with Oculus VR SDK 1.3.0 (OVR) and OpenVR SDK (1.0.17).
 This should be considered a hello world program with as few dependencies as possible.
+Both project uses a single source file with a similar structure.
 
 ## Dependencies
  - SDL2 Development Libraries (2.0.8) https://www.libsdl.org/download-2.0.php
