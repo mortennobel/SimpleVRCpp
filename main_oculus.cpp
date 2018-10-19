@@ -10,19 +10,28 @@
 #include "glm/gtc/type_ptr.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 
-// Include the Oculus SDK
+#pragma region VR_INCLUDES
 #include "OVR_CAPI_GL.h"
 #include "Extras/OVR_Math.h"
+#pragma endregion VR_INCLUDES  
 
-static bool quitting = false;
-static SDL_Window *window = NULL;
-static SDL_GLContext gl_context;
+#pragma region OPENGL_STATE
+bool quitting = false;
+SDL_Window *window = NULL;
+SDL_GLContext gl_context;
+
 
 GLuint vertexBuffer, vertexArrayObject, shaderProgram;
 GLint positionAttribute, colorAttribute;
 
 GLint modelUniform, viewUniform, projectionUniform;
 
+glm::vec3 pos = { 0.0f, 0.0f, 0.0f };
+float nearPlane = 0.1;
+float farPlane = 100.0;
+#pragma endregion OPENGL_STATE
+
+#pragma region VR_HELPER_FN
 // OculusTextureBuffer is from the OculusSDK\Samples\OculusRoomTiny\OculusRoomTiny (GL)\main.cpp
 struct OculusTextureBuffer
 {
@@ -167,6 +176,9 @@ struct OculusTextureBuffer
 	}
 };
 
+#pragma endregion VR_HELPER_FN
+
+#pragma region VR_STATE
 OculusTextureBuffer * eyeRenderTexture[2] = { nullptr, nullptr };
 ovrSession session;
 ovrGraphicsLuid luid;
@@ -175,10 +187,11 @@ double sensorSampleTime;
 ovrEyeRenderDesc eyeRenderDesc[2];
 ovrPosef EyeRenderPose[2];
 ovrPosef HmdToEyePose[2];
+#pragma endregion VR_STATE
 
-glm::vec3 pos = { 0.0f, 0.0f, 0.0f };
 
 
+#pragma region OPENGL_RENDERING
 void loadBufferData() {
 	// vertex position, color
 	float vertexData[32] = {
@@ -305,6 +318,41 @@ void setupOpenGL() {
 	glEnable(GL_DEPTH_TEST);
 }
 
+void renderWorld(glm::mat4 view, glm::mat4 projection) {
+	glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glUseProgram(shaderProgram);
+
+	glUniformMatrix4fv(viewUniform, 1, false, glm::value_ptr(view));
+	glUniformMatrix4fv(projectionUniform, 1, false, glm::value_ptr(projection));
+	for (float x = -10; x <= 10; x += 2.5f) {
+		for (float z = -10; z <= 10; z += 2.5f) {
+			glm::mat4 modelMat = glm::translate(glm::mat4(1), glm::vec3(x, 0.0f, z));
+			glUniformMatrix4fv(modelUniform, 1, false, glm::value_ptr(modelMat));
+			glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+		}
+	}
+
+}
+
+void renderScreen(int width, int height, glm::mat4& viewMatCam) {
+	SDL_GL_MakeCurrent(window, gl_context);
+
+	// restore OpenGL state
+	glViewport(0, 0, width, height);
+	glScissor(0, 0, width, height);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	glm::mat4 projection = glm::perspective(glm::radians(60.0f), width / (float)height, 0.1f, 100.0f);
+	// render to screen - same view as last eye, but different projection
+	renderWorld(viewMatCam, projection);
+
+	SDL_GL_SwapWindow(window);
+}
+#pragma endregion OPENGL_RENDERING
+
+#pragma region VR_RENDERING
 void setupOculus() {
 	ovrInitParams initParams = { ovrInit_RequestVersion | ovrInit_FocusAware, OVR_MINOR_VERSION, NULL, 0, 0 };
 	ovrResult result = ovr_Initialize(&initParams);
@@ -326,23 +374,6 @@ void setupOculus() {
 	}
 }
 
-void renderWorld(glm::mat4 view, glm::mat4 projection) {
-	glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	glUseProgram(shaderProgram);
-
-	glUniformMatrix4fv(viewUniform, 1, false, glm::value_ptr(view));
-	glUniformMatrix4fv(projectionUniform, 1, false, glm::value_ptr(projection));
-	for (float x = -10; x <= 10; x += 2.5f) {
-		for (float z = -10; z <= 10; z += 2.5f) {
-			glm::mat4 modelMat = glm::translate(glm::mat4(1), glm::vec3(x,0.0f,z));
-			glUniformMatrix4fv(modelUniform, 1, false, glm::value_ptr(modelMat));
-			glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-		}
-	}
-	
-}
 
 void renderVR(glm::mat4 & viewMatWorld, glm::mat4 & viewMatCam, int frameIndex) {
 	for (int eye = 0; eye < 2; eye++) {
@@ -358,7 +389,7 @@ void renderVR(glm::mat4 & viewMatWorld, glm::mat4 & viewMatCam, int frameIndex) 
 		OVR::Vector3f shiftedEyePos = Pos2 + rollPitchYaw.Transform(EyeRenderPose[eye].Position);
 
 		OVR::Matrix4f view = OVR::Matrix4f::LookAtRH(shiftedEyePos, shiftedEyePos + finalForward, finalUp);
-		OVR::Matrix4f proj = ovrMatrix4f_Projection(hmdDesc.DefaultEyeFov[eye], 0.1, 100, ovrProjection_None);
+		OVR::Matrix4f proj = ovrMatrix4f_Projection(hmdDesc.DefaultEyeFov[eye], nearPlane, farPlane, ovrProjection_None);
 		viewMatCam = glm::transpose(glm::make_mat4(view.M[0])) * viewMatWorld;
 		glm::mat4 projG = glm::transpose(glm::make_mat4(proj.M[0]));
 
@@ -396,21 +427,6 @@ void renderVR(glm::mat4 & viewMatWorld, glm::mat4 & viewMatCam, int frameIndex) 
 	ovr_SubmitFrame(session, frameIndex, nullptr, &layers, 1);
 }
 
-void renderScreen(int width, int height, glm::mat4& viewMatCam) {
-	SDL_GL_MakeCurrent(window, gl_context);
-
-	// restore OpenGL state
-	glViewport(0, 0, width, height);
-	glScissor(0, 0, width, height);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-	glm::mat4 projection = glm::perspective(glm::radians(60.0f), width / (float)height, 0.1f, 100.0f);
-	// render to screen - same view as last eye, but different projection
-	renderWorld(viewMatCam, projection);
-
-	SDL_GL_SwapWindow(window);
-}
-
 void updateHMDMatrixPose(int frameIndex) {
 	// Call ovr_GetRenderDesc each frame to get the ovrEyeRenderDesc, as the returned values (e.g. HmdToEyePose) may change at runtime.
 	eyeRenderDesc[0] = ovr_GetRenderDesc(session, ovrEye_Left, hmdDesc.DefaultEyeFov[0]);
@@ -429,6 +445,8 @@ void updateHMDMatrixPose(int frameIndex) {
 
 
 }
+#pragma endregion VR_RENDERING
+
 
 int main(int argc, char* argv[]) {
 
