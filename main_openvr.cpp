@@ -60,8 +60,8 @@ void createFBO(GLuint*  FB, GLuint*  tex, GLuint*  depthTex, int targetSizeW, in
 
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, targetSizeW, targetSizeH, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
@@ -78,6 +78,7 @@ void createFBO(GLuint*  FB, GLuint*  tex, GLuint*  depthTex, int targetSizeW, in
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 		std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 #pragma endregion VR_HELPER_FN
@@ -231,11 +232,13 @@ void loadShader() {
 }
 
 void setupOpenGL() {
+	
 	std::cout << "OpenGL version " << glGetString(GL_VERSION) << std::endl;
 	loadShader();
 	loadBufferData();
 
 	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_FRAMEBUFFER_SRGB);
 }
 
 void renderWorld(glm::mat4 view, glm::mat4 projection) {
@@ -341,6 +344,7 @@ glm::mat4 getHMDMatrixPoseEye(vr::Hmd_Eye nEye)
 
 void updateHMDMatrixPose()
 {
+	
 	vr::VRCompositor()->WaitGetPoses(m_rTrackedDevicePose, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
 
 	m_iValidPoseCount = 0;
@@ -375,24 +379,28 @@ void updateHMDMatrixPose()
 		mat4ViewLeft = glm::inverse(m_mat4HMDPose*mat4eyePosLeft);
 		mat4ViewRight = glm::inverse(m_mat4HMDPose*mat4eyePosRight);
 	}
+	
 }
 
 void renderVR(glm::mat4 & viewMatWorld) {
 	updateHMDMatrixPose();
+	
 	glViewport(0, 0, targetSizeW, targetSizeH);
 	glScissor(0, 0, targetSizeW, targetSizeH);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, leftFB);
-	renderWorld(mat4ProjectionRight*viewMatWorld, mat4ProjectionLeft);
+	renderWorld(mat4ViewLeft*viewMatWorld, mat4ProjectionLeft);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	vr::Texture_t leftEyeTexture = { (void*)(uintptr_t)leftTex, vr::TextureType_OpenGL, vr::ColorSpace_Gamma };
 	vr::VRCompositor()->Submit(vr::Eye_Left, &leftEyeTexture);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	
 	glBindFramebuffer(GL_FRAMEBUFFER, rightFB);
 	
-	renderWorld(mat4ProjectionLeft*viewMatWorld, mat4ProjectionRight);
+	renderWorld(mat4ViewRight*viewMatWorld, mat4ProjectionRight);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	vr::Texture_t rightEyeTexture = { (void*)(uintptr_t)rightTex, vr::TextureType_OpenGL, vr::ColorSpace_Gamma };
 	vr::VRCompositor()->Submit(vr::Eye_Right, &rightEyeTexture);
+	
 
 }
 #pragma endregion VR_RENDERING
@@ -406,7 +414,7 @@ int main(int argc, char* argv[]) {
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-
+	
 	// Create an application window with the following settings:
 	int width = 640;
 	int height = 480;
@@ -469,13 +477,13 @@ int main(int argc, char* argv[]) {
 		}
 
 		glm::mat4 viewMatWorld = glm::translate(glm::mat4(1), pos);
-		glm::mat4 viewMatCam;
-
-		updateHMDMatrixPose();
-
+		
 		renderVR(viewMatWorld);
-		renderScreen(width, height, viewMatCam);
+		renderScreen(width, height, viewMatWorld);
+		SDL_Delay(1);
 	}
+
+	vr::VR_Shutdown();
 
 	SDL_GL_DeleteContext(gl_context);
 

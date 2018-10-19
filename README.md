@@ -2,13 +2,14 @@
 
 # SimpleVRCpp
 
-Simple example of how to use OpenGL, SDL2 (2.0.8) with Oculus VR SDK 1.3.0 (OVR).
+Simple example of how to use OpenGL, SDL2 (2.0.8) with Oculus VR SDK 1.3.0 (OVR) and OpenVR SDK (1.0.17).
 This should be considered a hello world program with as few dependencies as possible.
 
 ## Dependencies
  - SDL2 Development Libraries (2.0.8) https://www.libsdl.org/download-2.0.php
  - GLEW (2.1.0) http://glew.sourceforge.net/
- - Oculus SDK for Windows https://developer.oculus.com/downloads/native-windows/
+ - Oculus SDK (1.30) for Windows https://developer.oculus.com/downloads/native-windows/
+ - OpenVR SDK (1.0.17) https://github.com/ValveSoftware/openvr/releases
  - GLM (bundled)
 
 ## Getting started

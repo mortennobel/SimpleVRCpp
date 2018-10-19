@@ -530,6 +530,8 @@ int main(int argc, char* argv[]) {
 		renderVR(viewMatWorld, viewMatCam, frameIndex);
 		renderScreen(width, height, viewMatCam);
 	}
+	ovr_Destroy(session);
+	ovr_Shutdown();
 
 	SDL_GL_DeleteContext(gl_context);
 
