@@ -86,24 +86,18 @@ void createFBO(GLuint*  FB, GLuint*  tex, GLuint*  depthTex, int targetSizeW, in
 #pragma region VR_STATE
 uint32_t targetSizeW;
 uint32_t targetSizeH;
-glm::mat4 mat4ProjectionLeft;
-glm::mat4 mat4ProjectionRight;
-glm::mat4 mat4ViewLeft;
-glm::mat4 mat4ViewRight;
-glm::mat4 mat4eyePosLeft;
-glm::mat4 mat4eyePosRight;
+glm::mat4 mat4Projection[2];
+glm::mat4 mat4View[2];
+glm::mat4 mat4eyePos[2];
 glm::mat4 getHMDMatrixPoseEye(vr::Hmd_Eye nEye);
 glm::mat4 getHMDMatrixProjectionEye(vr::Hmd_Eye nEye);
 vr::IVRSystem* vrSystem;
 vr::TrackedDevicePose_t m_rTrackedDevicePose[vr::k_unMaxTrackedDeviceCount];
 glm::mat4 m_rmat4DevicePose[vr::k_unMaxTrackedDeviceCount];
 bool m_rbShowTrackedDevice[vr::k_unMaxTrackedDeviceCount];
-GLuint  leftFB;
-GLuint  leftTex;
-GLuint  leftDepthTex;
-GLuint  rightFB;
-GLuint  rightTex;
-GLuint  rightDepthTex;
+GLuint  fb[2];
+GLuint  tex[2];
+GLuint  depthTex[2];
 int m_iValidPoseCount;
 int m_iValidPoseCount_Last;
 glm::mat4 m_mat4HMDPose;
@@ -276,12 +270,6 @@ void renderScreen(int width, int height, glm::mat4& viewMatCam) {
 #pragma endregion OPENGL_RENDERING
 
 #pragma region VR_RENDERING
-void setupCameras()
-{
-	mat4ProjectionLeft = getHMDMatrixProjectionEye(vr::Eye_Left);
-	mat4ProjectionRight = getHMDMatrixProjectionEye(vr::Eye_Right);
-}
-
 void setupOpenVR() {
 	vr::HmdError peError = vr::VRInitError_None;
 	vrSystem = vr::VR_Init(&peError, vr::VRApplication_Scene);
@@ -308,12 +296,12 @@ void setupOpenVR() {
 
 	vrSystem->GetRecommendedRenderTargetSize(&targetSizeW, &targetSizeH);
 	
-	createFBO(&leftFB, &leftTex, &leftDepthTex, targetSizeW, targetSizeH);
-	createFBO(&rightFB, &rightTex, &rightDepthTex, targetSizeW, targetSizeH);
-	
-	setupCameras();
-	mat4eyePosLeft = getHMDMatrixPoseEye(vr::Eye_Left);
-	mat4eyePosRight = getHMDMatrixPoseEye(vr::Eye_Right);
+	for (int eye = 0; eye < 2; eye++) {
+		createFBO(&fb[eye], &tex[eye], &depthTex[1], targetSizeW, targetSizeH);
+		vr::EVREye e = vr::EVREye(eye);
+		mat4Projection[eye] = getHMDMatrixProjectionEye(e);
+		mat4eyePos[eye] = getHMDMatrixPoseEye(e);
+	}
 }
 
 
@@ -376,8 +364,9 @@ void updateHMDMatrixPose()
 	if (m_rTrackedDevicePose[vr::k_unTrackedDeviceIndex_Hmd].bPoseIsValid)
 	{
 		m_mat4HMDPose = m_rmat4DevicePose[vr::k_unTrackedDeviceIndex_Hmd];
-		mat4ViewLeft = glm::inverse(m_mat4HMDPose*mat4eyePosLeft);
-		mat4ViewRight = glm::inverse(m_mat4HMDPose*mat4eyePosRight);
+		for (int eye = 0;eye<2;eye++){
+			mat4View[eye] = glm::inverse(m_mat4HMDPose*mat4eyePos[eye]);
+		}
 	}
 	
 }
@@ -387,21 +376,14 @@ void renderVR(glm::mat4 & viewMatWorld) {
 	
 	glViewport(0, 0, targetSizeW, targetSizeH);
 	glScissor(0, 0, targetSizeW, targetSizeH);
-
-	glBindFramebuffer(GL_FRAMEBUFFER, leftFB);
-	renderWorld(mat4ViewLeft*viewMatWorld, mat4ProjectionLeft);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	vr::Texture_t leftEyeTexture = { (void*)(uintptr_t)leftTex, vr::TextureType_OpenGL, vr::ColorSpace_Gamma };
-	vr::VRCompositor()->Submit(vr::Eye_Left, &leftEyeTexture);
-	
-	glBindFramebuffer(GL_FRAMEBUFFER, rightFB);
-	
-	renderWorld(mat4ViewRight*viewMatWorld, mat4ProjectionRight);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	vr::Texture_t rightEyeTexture = { (void*)(uintptr_t)rightTex, vr::TextureType_OpenGL, vr::ColorSpace_Gamma };
-	vr::VRCompositor()->Submit(vr::Eye_Right, &rightEyeTexture);
-	
-
+	for (int eye = 0;eye < 2;eye++){
+		vr::EVREye e = vr::EVREye(eye);
+		glBindFramebuffer(GL_FRAMEBUFFER, fb[eye]);
+		renderWorld(mat4View[eye]*viewMatWorld, mat4Projection[eye]);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		vr::Texture_t leftEyeTexture = { (void*)(uintptr_t)tex[eye], vr::TextureType_OpenGL, vr::ColorSpace_Gamma };
+		vr::VRCompositor()->Submit(e, &leftEyeTexture);
+	}
 }
 #pragma endregion VR_RENDERING
 

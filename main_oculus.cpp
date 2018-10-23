@@ -437,15 +437,12 @@ void updateHMDMatrixPose(int frameIndex) {
 		HmdToEyePose[eye] = eyeRenderDesc[eye].HmdToEyePose;
 	}
 
-
 	// this data is fetched only for the debug display, no need to do this to just get the rendering work
 	auto m_frameTiming = ovr_GetPredictedDisplayTime(session, frameIndex);
 	auto m_trackingState = ovr_GetTrackingState(session, m_frameTiming, ovrTrue);
 
 	// sensorSampleTime is fed into the layer later
 	ovr_GetEyePoses(session, frameIndex, ovrTrue, HmdToEyePose, EyeRenderPose, &sensorSampleTime);
-
-
 }
 #pragma endregion VR_RENDERING
 
