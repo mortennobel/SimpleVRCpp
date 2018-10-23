@@ -428,13 +428,15 @@ void renderVR(glm::mat4 & viewMatWorld, glm::mat4 & viewMatCam, int frameIndex) 
 }
 
 void updateHMDMatrixPose(int frameIndex) {
-	// Call ovr_GetRenderDesc each frame to get the ovrEyeRenderDesc, as the returned values (e.g. HmdToEyePose) may change at runtime.
-	eyeRenderDesc[0] = ovr_GetRenderDesc(session, ovrEye_Left, hmdDesc.DefaultEyeFov[0]);
-	eyeRenderDesc[1] = ovr_GetRenderDesc(session, ovrEye_Right, hmdDesc.DefaultEyeFov[1]);
+	for (int eye = 0; eye < 2; ++eye)
+	{
+		// Call ovr_GetRenderDesc each frame to get the ovrEyeRenderDesc, as the returned values (e.g. HmdToEyePose) may change at runtime.
+		eyeRenderDesc[eye] = ovr_GetRenderDesc(session, ovrEyeType(eye), hmdDesc.DefaultEyeFov[eye]);
 
-	// Get eye poses, feeding in correct IPD offset
-	HmdToEyePose[0] = eyeRenderDesc[0].HmdToEyePose;
-	HmdToEyePose[1] = eyeRenderDesc[1].HmdToEyePose;
+		// Get eye poses, feeding in correct IPD offset
+		HmdToEyePose[eye] = eyeRenderDesc[eye].HmdToEyePose;
+	}
+
 
 	// this data is fetched only for the debug display, no need to do this to just get the rendering work
 	auto m_frameTiming = ovr_GetPredictedDisplayTime(session, frameIndex);
