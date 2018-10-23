@@ -101,8 +101,6 @@ GLuint  depthTex[2];
 int m_iValidPoseCount;
 int m_iValidPoseCount_Last;
 glm::mat4 m_mat4HMDPose;
-std::string m_strPoseClasses;                          // what classes we saw poses for this frame
-char m_rDevClassChar[vr::k_unMaxTrackedDeviceCount];   // for each device, a character representing its class
 
 #pragma endregion VR_STATE
 
@@ -292,7 +290,6 @@ void setupOpenVR() {
 		std::cout << "Compositor initialization failed. See log file for details\n";
 		return;
 	}
-	memset(m_rDevClassChar, 0, sizeof(m_rDevClassChar));
 
 	vrSystem->GetRecommendedRenderTargetSize(&targetSizeW, &targetSizeH);
 	
@@ -332,11 +329,9 @@ glm::mat4 getHMDMatrixPoseEye(vr::Hmd_Eye nEye)
 
 void updateHMDMatrixPose()
 {
-	
 	vr::VRCompositor()->WaitGetPoses(m_rTrackedDevicePose, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
 
 	m_iValidPoseCount = 0;
-	m_strPoseClasses = "";
 	for (int nDevice = 0; nDevice < vr::k_unMaxTrackedDeviceCount; ++nDevice)
 	{
 		if (m_rTrackedDevicePose[nDevice].bPoseIsValid)
@@ -345,19 +340,6 @@ void updateHMDMatrixPose()
 			float *f = &(m_rTrackedDevicePose[nDevice].mDeviceToAbsoluteTracking.m[0][0]);
 			glm::mat3x4 m = glm::make_mat3x4(f);
 			m_rmat4DevicePose[nDevice] = glm::transpose((glm::mat4)m);
-			if (m_rDevClassChar[nDevice] == 0)
-			{
-				switch (vrSystem->GetTrackedDeviceClass(nDevice))
-				{
-				case vr::TrackedDeviceClass_Controller:        m_rDevClassChar[nDevice] = 'C'; break;
-				case vr::TrackedDeviceClass_HMD:               m_rDevClassChar[nDevice] = 'H'; break;
-				case vr::TrackedDeviceClass_Invalid:           m_rDevClassChar[nDevice] = 'I'; break;
-				case vr::TrackedDeviceClass_GenericTracker:    m_rDevClassChar[nDevice] = 'G'; break;
-				case vr::TrackedDeviceClass_TrackingReference: m_rDevClassChar[nDevice] = 'T'; break;
-				default:                                       m_rDevClassChar[nDevice] = '?'; break;
-				}
-			}
-			m_strPoseClasses += m_rDevClassChar[nDevice];
 		}
 	}
 
@@ -381,8 +363,8 @@ void renderVR(glm::mat4 & viewMatWorld) {
 		glBindFramebuffer(GL_FRAMEBUFFER, fb[eye]);
 		renderWorld(mat4View[eye]*viewMatWorld, mat4Projection[eye]);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		vr::Texture_t leftEyeTexture = { (void*)(uintptr_t)tex[eye], vr::TextureType_OpenGL, vr::ColorSpace_Gamma };
-		vr::VRCompositor()->Submit(e, &leftEyeTexture);
+		vr::Texture_t eyeTexture = { (void*)(uintptr_t)tex[eye], vr::TextureType_OpenGL, vr::ColorSpace_Gamma };
+		vr::VRCompositor()->Submit(e, &eyeTexture);
 	}
 }
 #pragma endregion VR_RENDERING
