@@ -98,8 +98,6 @@ bool m_rbShowTrackedDevice[vr::k_unMaxTrackedDeviceCount];
 GLuint  fb[2];
 GLuint  tex[2];
 GLuint  depthTex[2];
-int m_iValidPoseCount;
-int m_iValidPoseCount_Last;
 glm::mat4 m_mat4HMDPose;
 
 #pragma endregion VR_STATE
@@ -331,12 +329,10 @@ void updateHMDMatrixPose()
 {
 	vr::VRCompositor()->WaitGetPoses(m_rTrackedDevicePose, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
 
-	m_iValidPoseCount = 0;
 	for (int nDevice = 0; nDevice < vr::k_unMaxTrackedDeviceCount; ++nDevice)
 	{
 		if (m_rTrackedDevicePose[nDevice].bPoseIsValid)
 		{
-			m_iValidPoseCount++;
 			float *f = &(m_rTrackedDevicePose[nDevice].mDeviceToAbsoluteTracking.m[0][0]);
 			glm::mat3x4 m = glm::make_mat3x4(f);
 			m_rmat4DevicePose[nDevice] = glm::transpose((glm::mat4)m);
